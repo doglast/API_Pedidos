@@ -2,14 +2,13 @@ const sql = require('mssql');
 const { mapOrderToDatabaseModel } = require('../utils/orderMapper');
 const dbConfig = require('../config/database');
 
-/**
- * Cria um novo pedido no banco de dados.
- */
+// Cria um novo pedido no banco de dados.
+
 const createOrder = async (req, res) => {
     try {
         const payload = req.body;
 
-        // 1. Validação Básica
+        // Validação Básica
         if (!payload.numeroPedido || !payload.items || payload.items.length === 0) {
             return res.status(400).json({ 
                 error: 'Bad Request', 
@@ -17,10 +16,10 @@ const createOrder = async (req, res) => {
             });
         }
 
-        // 2. Transformação dos Dados (Mapping)
+        // Transformação dos Dados (Mapping)
         const orderData = mapOrderToDatabaseModel(payload);
 
-        // 3. Conexão com o Banco e Transação
+        // Conexão com o Banco e Transação
         const pool = await sql.connect(dbConfig);
         const transaction = new sql.Transaction(pool);
         
@@ -54,7 +53,7 @@ const createOrder = async (req, res) => {
             // Confirma a transação se tudo der certo
             await transaction.commit();
 
-            // 4. Retorno de Sucesso (201 Created) e o dado mapeado para confirmação
+            // Retorno de Sucesso (201 Created) e o dado mapeado para confirmação
             return res.status(201).json({
                 message: 'Pedido criado com sucesso!',
                 data: orderData
@@ -69,7 +68,7 @@ const createOrder = async (req, res) => {
     } catch (error) {
         console.error('Erro ao criar pedido:', error);
         
-        // 5. Tratamento de Erro Robusto (500 Internal Server Error)
+        // Tratamento de Erro Robusto (500 Internal Server Error)
         return res.status(500).json({ 
             error: 'Internal Server Error', 
             message: 'Ocorreu um erro ao processar e salvar o pedido no banco de dados.' 
@@ -77,6 +76,63 @@ const createOrder = async (req, res) => {
     }
 };
 
+// Busca um pedido específico pelo ID.
+
+const getOrder = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const pool = await sql.connect(dbConfig);
+        
+        const orderResult = await pool.request()
+            .input('orderId', sql.VarChar, id)
+            .query(`
+                SELECT orderId, value, creationDate 
+                FROM [Order] 
+                WHERE orderId = @orderId
+            `);
+
+        // Validação: Se não encontrou o pedido, retorna 404 (Not Found)
+        if (orderResult.recordset.length === 0) {
+            return res.status(404).json({
+                error: 'Not Found',
+                message: `Pedido com o número '${id}' não foi encontrado.`
+            });
+        }
+
+        const orderHeader = orderResult.recordset[0];
+
+        
+        const itemsResult = await pool.request()
+            .input('orderId', sql.VarChar, id)
+            .query(`
+                SELECT productId, quantity, price 
+                FROM Items 
+                WHERE orderId = @orderId
+            `);
+
+        // Monta o objeto final combinando o Pedido e seus Itens
+        const responseData = {
+            orderId: orderHeader.orderId,
+            value: orderHeader.value,
+            creationDate: orderHeader.creationDate,
+            items: itemsResult.recordset
+        };
+
+        // Retorna 200 (OK) com os dados
+        return res.status(200).json(responseData);
+
+    } catch (error) {
+        console.error('Erro ao buscar o pedido:', error);
+        
+        return res.status(500).json({ 
+            error: 'Internal Server Error', 
+            message: 'Ocorreu um erro ao consultar o pedido no banco de dados.' 
+        });
+    }
+};
+
 module.exports = {
-    createOrder
+    createOrder,
+    getOrder
 };
