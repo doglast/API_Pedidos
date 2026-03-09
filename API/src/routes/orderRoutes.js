@@ -72,7 +72,7 @@ router.get('/order/list', authenticateToken, orderController.listOrders);
  *     summary: Busca um pedido específico pelo ID
  *     tags: [Orders]
  *     parameters:
- *         name: id
+ *       - name: id
  *         in: path
  *         required: true
  *         description: Número do pedido que será buscado
