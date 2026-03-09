@@ -14,4 +14,7 @@ router.get('/order/:id', orderController.getOrder);
 // Rota PUT para atualizar o pedido
 router.put('/order/:id', orderController.updateOrder);
 
+// Rota DELETE para excluir o pedido
+router.delete('/order/:id', orderController.deleteOrder);
+
 module.exports = router;

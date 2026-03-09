@@ -188,6 +188,7 @@ const listOrders = async (req, res) => {
     }
 };
 
+// Atualiza um pedido específico pelo ID.
 const updateOrder = async (req, res) => {
     try {
         const { id } = req.params;
@@ -282,9 +283,69 @@ const updateOrder = async (req, res) => {
     }
 };
 
+//Exclui um pedido e seus itens do banco de dados pelo ID.
+
+const deleteOrder = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const pool = await sql.connect(dbConfig);
+
+        // Verifica se o pedido existe
+        const checkResult = await pool.request()
+            .input('orderId', sql.VarChar, id)
+            .query(`SELECT orderId FROM [Order] WHERE orderId = @orderId`);
+
+        if (checkResult.recordset.length === 0) {
+            return res.status(404).json({
+                error: 'Not Found',
+                message: `Não é possível excluir. Pedido '${id}' não encontrado.`
+            });
+        }
+
+        // Inicia a Transação
+        const transaction = new sql.Transaction(pool);
+        await transaction.begin();
+
+        try {
+            // Deleta primeiro os Itens (Detalhes)
+            const deleteItemsReq = new sql.Request(transaction);
+            await deleteItemsReq
+                .input('orderId', sql.VarChar, id)
+                .query(`DELETE FROM Items WHERE orderId = @orderId`);
+
+            // Deleta o Cabeçalho do Pedido
+            const deleteHeaderReq = new sql.Request(transaction);
+            await deleteHeaderReq
+                .input('orderId', sql.VarChar, id)
+                .query(`DELETE FROM [Order] WHERE orderId = @orderId`);
+
+            // Confirma a exclusão de ambas as tabelas
+            await transaction.commit();
+
+            // Retorna sucesso (200 OK)
+            return res.status(200).json({
+                message: `Pedido '${id}' e seus itens foram excluídos com sucesso.`
+            });
+
+        } catch (dbError) {
+            // Se algo der errado na exclusão de alguma das tabelas, desfaz tudo
+            await transaction.rollback();
+            throw dbError; 
+        }
+
+    } catch (error) {
+        console.error('Erro ao excluir o pedido:', error);
+        return res.status(500).json({ 
+            error: 'Internal Server Error', 
+            message: 'Ocorreu um erro ao excluir o pedido no banco de dados.' 
+        });
+    }
+};
+
 module.exports = {
     createOrder,
     getOrder,
     listOrders,
-    updateOrder
+    updateOrder,
+    deleteOrder
 };
