@@ -132,7 +132,65 @@ const getOrder = async (req, res) => {
     }
 };
 
+// Lista todos os pedidos e seus respectivos itens.
+
+const listOrders = async (req, res) => {
+    try {
+        const pool = await sql.connect(dbConfig);
+
+        // Busca todos os cabeçalhos de pedidos
+        const ordersResult = await pool.request().query(`
+            SELECT orderId, value, creationDate 
+            FROM [Order]
+        `);
+        const orders = ordersResult.recordset;
+
+        // Se não houver pedidos, retorna um array vazio com status 200 (OK)
+        if (orders.length === 0) {
+            return res.status(200).json([]);
+        }
+
+        // Busca todos os itens de uma vez (evita o problema N+1)
+        const itemsResult = await pool.request().query(`
+            SELECT orderId, productId, quantity, price 
+            FROM Items
+        `);
+        const allItems = itemsResult.recordset;
+
+        // Agrupa os itens dentro de seus respectivos pedidos
+        const responseData = orders.map(order => {
+            // Filtra os itens que pertencem a este pedido específico
+            const orderItems = allItems.filter(item => item.orderId === order.orderId);
+
+            return {
+                orderId: order.orderId,
+                value: order.value,
+                creationDate: order.creationDate,
+                // Mapeia para remover a coluna orderId de dentro do item, mantendo o JSON limpo
+                items: orderItems.map(item => ({
+                    productId: item.productId,
+                    quantity: item.quantity,
+                    price: item.price
+                }))
+            };
+        });
+
+        // Retorna a lista completa com status 200 (OK)
+        return res.status(200).json(responseData);
+
+    } catch (error) {
+        console.error('Erro ao listar os pedidos:', error);
+        
+        return res.status(500).json({ 
+            error: 'Internal Server Error', 
+            message: 'Ocorreu um erro ao listar os pedidos do banco de dados.' 
+        });
+    }
+};
+
+
 module.exports = {
     createOrder,
-    getOrder
+    getOrder,
+    listOrders
 };
