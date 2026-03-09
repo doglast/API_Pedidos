@@ -1,10 +1,10 @@
-// Preencha com as credenciais do seu SQL Server
 module.exports = {
-    user: 'SEU_USUARIO',
-    password: 'SUA_SENHA',
-    server: 'localhost', 
-    database: 'NOME_DO_SEU_BANCO',
+    user: process.env.DB_USER,
+    password: process.env.DB_PASS,
+    server: process.env.DB_SERVER, 
+    database: process.env.DB_NAME,
     options: {
-        encrypt: true, // Necessário para Azure, opcional para local
+        encrypt: false, // true para Azure, false para SQL Server local padrão
+        trustServerCertificate: true // Importante para ambiente de desenvolvimento local
     }
 };

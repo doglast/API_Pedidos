@@ -1,13 +1,17 @@
+require('dotenv').config();
 const express = require('express');
 const orderRoutes = require('./routes/orderRoutes');
+const authController = require('./controllers/authController');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Middleware para interpretar JSON no body da requisição
 app.use(express.json());
 
-// Registro das rotas
+// Rota PÚBLICA de login para gerar o token
+app.post('/login', authController.login);
+
+// Rotas PRIVADAS (o middleware está lá dentro do orderRoutes protegendo elas)
 app.use('/', orderRoutes);
 
 // Tratamento para rotas não encontradas (404)
