@@ -188,9 +188,103 @@ const listOrders = async (req, res) => {
     }
 };
 
+const updateOrder = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const payload = req.body;
+
+        // 1. Validação Básica
+        if (!payload.items || payload.items.length === 0) {
+            return res.status(400).json({ 
+                error: 'Bad Request', 
+                message: 'É necessário enviar os itens do pedido para atualização.' 
+            });
+        }
+
+        const pool = await sql.connect(dbConfig);
+
+        // 2. Verifica se o pedido realmente existe antes de tentar atualizar
+        const checkResult = await pool.request()
+            .input('orderId', sql.VarChar, id)
+            .query(`SELECT orderId FROM [Order] WHERE orderId = @orderId`);
+
+        if (checkResult.recordset.length === 0) {
+            return res.status(404).json({
+                error: 'Not Found',
+                message: `Não é possível atualizar. Pedido '${id}' não encontrado.`
+            });
+        }
+
+        // Transformação dos Dados usando o Mapper que criamos lá no começo
+        const orderData = mapOrderToDatabaseModel(payload);
+        
+        // Garantimos que o ID a ser atualizado seja o da URL, ignorando o do body (Boa prática)
+        orderData.orderId = id; 
+
+        // Inicia a Transação
+        const transaction = new sql.Transaction(pool);
+        await transaction.begin();
+
+        try {
+            // Atualiza o Cabeçalho do Pedido
+            const updateHeaderReq = new sql.Request(transaction);
+            await updateHeaderReq
+                .input('orderId', sql.VarChar, orderData.orderId)
+                .input('value', sql.Numeric(10, 2), orderData.value)
+                .input('creationDate', sql.DateTime, new Date(orderData.creationDate))
+                .query(`
+                    UPDATE [Order] 
+                    SET value = @value, creationDate = @creationDate
+                    WHERE orderId = @orderId
+                `);
+
+            // Deleta os Itens Antigos
+            const deleteItemsReq = new sql.Request(transaction);
+            await deleteItemsReq
+                .input('orderId', sql.VarChar, orderData.orderId)
+                .query(`DELETE FROM Items WHERE orderId = @orderId`);
+
+            // Insere os Novos Itens
+            for (const item of orderData.items) {
+                const insertItemReq = new sql.Request(transaction);
+                await insertItemReq
+                    .input('orderId', sql.VarChar, orderData.orderId)
+                    .input('productId', sql.Int, item.productId)
+                    .input('quantity', sql.Int, item.quantity)
+                    .input('price', sql.Numeric(10, 2), item.price)
+                    .query(`
+                        INSERT INTO Items (orderId, productId, quantity, price)
+                        VALUES (@orderId, @productId, @quantity, @price)
+                    `);
+            }
+
+            // Confirma todas as alterações no banco
+            await transaction.commit();
+
+            // Retorna sucesso (200 OK)
+            return res.status(200).json({
+                message: 'Pedido atualizado com sucesso!',
+                data: orderData
+            });
+
+        } catch (dbError) {
+            // Se algo falhar (ex: erro no insert do item), desfaz tudo
+            await transaction.rollback();
+            throw dbError; 
+        }
+
+    } catch (error) {
+        console.error('Erro ao atualizar o pedido:', error);
+        return res.status(500).json({ 
+            error: 'Internal Server Error', 
+            message: 'Ocorreu um erro ao atualizar o pedido no banco de dados.' 
+        });
+    }
+};
 
 module.exports = {
     createOrder,
     getOrder,
-    listOrders
+    listOrders,
+    updateOrder
 };
